@@ -31,6 +31,8 @@ def setup_natives(env):
 
 	for x in natives:
 		env.define(x['name'], x['func'])
+def convert(value):
+	return {'string': value}
 def stringify(value):
 	if isinstance(value, (list, tuple)):
 		a = []

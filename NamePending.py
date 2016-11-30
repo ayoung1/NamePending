@@ -2,9 +2,7 @@
 #-*- encoding=utf-8 -*-
 
 from __future__ import print_function
-import copy
-import argparse
-import sys, re, natives
+import re, sys, copy, natives, argparse
 reload(sys)  # Reload does the trick!
 sys.setdefaultencoding('UTF8')
 #sys.tracebacklimit=0
@@ -375,7 +373,7 @@ class Environment(object):
 			self.var.update({name:value})
 			if const:
 				self.const.append(name)
-def evaluation(exp, env, raw = False):
+def evaluation(exp, env):
 	exptype = exp['type']
 	if exptype == 'import':
 		if env.has_import(exp['file']):return
@@ -390,7 +388,7 @@ def evaluation(exp, env, raw = False):
 		return exp#exp['value'] if not raw else exp
 	elif exptype == 'assign':
 		if exp['left']['type'] == 'var':
-			return env.set(exp['left']['value'], evaluation(exp['right'], env, True), exp['left']['const'])
+			return env.set(exp['left']['value'], evaluation(exp['right'], env), exp['left']['const'])
 		elif exp['left']['type'] == 'list_retreve':
 			lastVal = None
 			values = env.get(exp['left']['name'])	
@@ -399,39 +397,39 @@ def evaluation(exp, env, raw = False):
 				try:
 					a['value'][x['value']] = env.get(exp['right']['value'])
 				except:
-					a['value'][x['value']] = evaluation(exp['right'], env, True)
+					a['value'][x['value']] = evaluation(exp['right'], env)
 			env.set(exp['left']['name'], a)
 			return a
 		StreamReader.error("Cannot assign to %s" % exp['left'])
 	elif exptype == 'list_retreve':
 		if len(exp['value']) == 1:
-			return evaluation(env.get(exp['name'])['value'][exp['value'][0]['value']], env, True)
+			return evaluation(env.get(exp['name'])['value'][exp['value'][0]['value']], env)
 		elif len(exp['value']) > 1:
 			lst = []
 			var = env.get(exp['name'])
 			for x in exp['value']:
-				x = evaluation(x, env, True)
+				x = evaluation(x, env)
 				lst.append(var[x['value']])
 			return lst
 	elif exptype == 'var':
 		try:
-                	return evaluation(env.get(exp['value']), env, raw)
+                	return evaluation(env.get(exp['value']), env)
 		except:
 			return env.get(exp['value'])
 	elif exptype == 'binary':
-		return apply_op(exp['operator'], evaluation(exp['left'], env, raw), evaluation(exp['right'], env, raw))
+		return apply_op(exp['operator'], evaluation(exp['left'], env), evaluation(exp['right'], env))
 	elif exptype == 'lambda':
-		return make_lambda(env, exp, raw)
+		return make_lambda(env, exp)
 	elif exptype == 'return':
 		returnval = ''
 		try:
 			returnval = env.get(exp['value'])
 		except:
-			returnval = evaluation(exp['value'], env, raw)
+			returnval = evaluation(exp['value'], env)
 		if returnval['type'] == 'list':
 			a = []
 			for x in range(len(returnval['value'])):
-				a.append(evaluation(returnval['value'][x], env, True))
+				a.append(evaluation(returnval['value'][x], env))
 			return {'type': 'list', 'value': a}
 		return returnval
 	elif exptype == 'list':
@@ -439,25 +437,25 @@ def evaluation(exp, env, raw = False):
 	elif exptype == 'let':
 		scope = env.extend()
 		for x in exp['vars']:
-			scope.define(x['name']['name'], evaluation(x['def'], env, raw) if x['def'] else False, x['name']['const'])
-		return evaluation(exp['body'], scope, raw)
+			scope.define(x['name']['name'], evaluation(x['def'], env) if x['def'] else False, x['name']['const'])
+		return evaluation(exp['body'], scope)
 	elif exptype == 'if':
-		cond = evaluation(exp['cond'], env, raw)
-		if cond['value'] != False: return evaluation(exp['then'], env, raw)
+		cond = evaluation(exp['cond'], env)
+		if cond['value'] != False: return evaluation(exp['then'], env)
 		try:
-			return evaluation(exp['else'], env, raw)
+			return evaluation(exp['else'], env)
 		except:
 			return False
 	elif exptype == 'prog':
 		val = False
 		for var in exp['prog']:
-			val = evaluation(var, env, raw)
+			val = evaluation(var, env)
 			if var['type'] == 'return':
 				return val
 		return None
 	elif exptype == 'call':
-		func = evaluation(exp['func'], env, raw)
-		params = [evaluation(x, env, raw) for x in exp['args']]
+		func = evaluation(exp['func'], env)
+		params = [evaluation(x, env) for x in exp['args']]
 		return func(*params)
 	else:
 		StreamReader.error("Cannot Evaluate Type %s" % exptype)
@@ -498,13 +496,13 @@ def apply_op(op, a, b):
 	elif op == '==': return build('bool', a == b)
 	elif op == '!=': return build('bool', a != b)
 	StreamReader.error("Cannot apply aperator %s" % op)
-def make_lambda(env, exp, raw):
+def make_lambda(env, exp):
 	def lamda(*args):
                 names = exp['vars']	
                 scope = env.extend()
                 for i in range(0, len(names)):
                         scope.define(names[i]['name'], args[i], names[i]['const'])
-                return evaluation(exp['body'], scope, raw)
+                return evaluation(exp['body'], scope)
 	if exp['name']:
 		name = exp['name']
 		env = env.extend()
