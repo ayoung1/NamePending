@@ -2,10 +2,12 @@
 #-*- encoding=utf-8 -*-
 
 from __future__ import print_function
-import re, sys, copy, natives, argparse
+import re, sys, copy, natives, argparse, json
 reload(sys)  # Reload does the trick!
 sys.setdefaultencoding('UTF8')
 #sys.tracebacklimit=0
+
+MAIN = {"args":[],"type":"call","func":{"const": False,"type":"var","value":"main"}}
 
 class StreamReader(object):
 	line = 0
@@ -508,19 +510,30 @@ def make_lambda(env, exp):
 		env = env.extend()
 		env.define(name, lamda)
 	return lamda
-if __name__ == '__main__' and len(sys.argv) > 1:
+if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description='The compiler for the --Name Pending-- language')
 	parser.add_argument('code', help='The main file to run')
-	parser.add_argument('-t', '--trace', action='store_true', help='Prints out the "compiled" code of your program')
+	parser.add_argument('--args', '-a', help='Arguments to pass to main as a list', nargs='*')
 	args = vars(parser.parse_args())
-
 	code = ""
 	with open(args['code']) as fin:
 		code = fin.read()
-	parser = Parser(Tokenizer(StreamReader(code)))
-	ast = Parser(Tokenizer(StreamReader(code))).parse_toplevel()
-	if args['trace']:
-		print(ast)
-	globalenv = Environment()
-	natives.setup_natives(globalenv)
-	evaluation(ast, globalenv)
+	ext = args['code'].split('.')
+	if ext[1] == 'np':
+		parser = Parser(Tokenizer(StreamReader(code)))
+		ast = Parser(Tokenizer(StreamReader(code))).parse_toplevel()
+		with open(ext[0] + '.ast', 'w') as fin:
+			fin.write(json.dumps(ast))
+	elif ext[1] == 'ast':
+		code = json.loads(code)
+		globalenv = Environment()
+		natives.setup_natives(globalenv)
+		evaluation(code, globalenv)
+		try:
+			for el in args['args']:
+				MAIN['args'].append({'type': 'str', 'value': args['args']})
+		except:
+			MAIN['args'].append({'type': 'null', 'value': None})
+		evaluation(MAIN, globalenv)
+	else:
+		print('Input file not ".np" or ".ast"')

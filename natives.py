@@ -1,5 +1,5 @@
 from __future__ import print_function
-import lambdalang
+import NamePending 
 
 def setup_natives(env):
 	natives = [
