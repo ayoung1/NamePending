@@ -9,7 +9,7 @@ main = lambda(arglist){
 	println('Hello World!');
 };
 ```
-Alternatively, lambda can be replaced with `λ` for a shorthand function declaration
+Alternatively, lambda can be replaced with `λ` for a shorthand lambda declaration
 ```
 main = λ(arglist){
 	println('Hello World!');
