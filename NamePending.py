@@ -510,6 +510,25 @@ def make_lambda(env, exp):
 		env = env.extend()
 		env.define(name, lamda)
 	return lamda
+
+def compile(code, fname):
+	parser = Parser(Tokenizer(StreamReader(code)))
+	ast = Parser(Tokenizer(StreamReader(code))).parse_toplevel()
+	with open(fname + '.ast', 'w') as fin:
+		fin.write(json.dumps(ast))
+
+def execute(code, args):
+	code = json.loads(code)
+	globalenv = Environment()
+	natives.setup_natives(globalenv)
+	evaluation(code, globalenv)
+	try:
+		for el in args['args']:
+			MAIN['args'].append({'type': 'str', 'value': args['args']})
+	except:
+		MAIN['args'].append({'type': 'null', 'value': None})
+	evaluation(MAIN, globalenv)
+		
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description='The compiler for the --Name Pending-- language')
 	parser.add_argument('code', help='The main file to run')
@@ -520,20 +539,8 @@ if __name__ == '__main__':
 		code = fin.read()
 	ext = args['code'].split('.')
 	if ext[1] == 'np':
-		parser = Parser(Tokenizer(StreamReader(code)))
-		ast = Parser(Tokenizer(StreamReader(code))).parse_toplevel()
-		with open(ext[0] + '.ast', 'w') as fin:
-			fin.write(json.dumps(ast))
+		compile(code, ext[0])
 	elif ext[1] == 'ast':
-		code = json.loads(code)
-		globalenv = Environment()
-		natives.setup_natives(globalenv)
-		evaluation(code, globalenv)
-		try:
-			for el in args['args']:
-				MAIN['args'].append({'type': 'str', 'value': args['args']})
-		except:
-			MAIN['args'].append({'type': 'null', 'value': None})
-		evaluation(MAIN, globalenv)
+		execute(code, args)
 	else:
 		print('Input file not ".np" or ".ast"')
