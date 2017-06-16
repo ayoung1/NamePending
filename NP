@@ -426,28 +426,27 @@ def evaluation(exp, env):
   elif exptype == 'num':return npo.number(exp['value'])
   elif exptype == 'str':return npo.string(exp['value'])
   elif exptype == 'bool':return npo.boolean(exp['value'])
+  elif exptype == 'list':return exp
   elif exptype == 'null':return npo.null()
   elif exptype == 'assign':
     if exp['left']['type'] == 'var':
       return env.set(exp['left']['value'], evaluation(exp['right'], env), exp['left']['const'])
     elif exp['left']['type'] == 'list_retreve':
       lastVal = None
-      values = env.get(exp['left']['name'])	
-      a = copy.deepcopy(values)
-      for x in exp['left']['value']:	
-        a['value'][x['value']] = evaluation(exp['right'], env)
-        env.set(exp['left']['name'], a)
-        return a
+      values = env.get(exp['left']['name'])
+      for x in exp['left']['value']:
+        values.value[x['value']] = evaluation(exp['right'], env)	
+      return a
     raise Exception("Cannot assign to {}".format(exp['left']))
   elif exptype == 'list_retreve':
     if len(exp['value']) == 1:
-      return evaluation(env.get(exp['name'])['value'][exp['value'][0]['value']], env)
+      return evaluation(env.get(exp['name']).value[exp['value'][0]['value']], env)
     elif len(exp['value']) > 1:
-      lst = []
+      lst = npo.vect()
       var = env.get(exp['name'])
       for x in exp['value']:
         x = evaluation(x, env)
-        lst.append(var[x['value']])
+        lst.add(var.value[x['value']])
       return lst
   elif exptype == 'var':
     try:
@@ -464,14 +463,12 @@ def evaluation(exp, env):
       returnval = env.get(exp['value'])
     except:
       returnval = evaluation(exp['value'], env)
-    if returnval['type'] == 'list':
-      a = []
-      for x in range(len(returnval['value'])):
-        a.append(evaluation(returnval['value'][x], env))
+    if returnval.getType == 'vector':
+      a = npo.vect()
+      for x in range(len(returnval.value)):
+        a.add(evaluation(returnval.value[x], env))
       return {'type': 'list', 'value': a}
     return returnval
-  elif exptype == 'list':
-    return exp
   elif exptype == 'let':
     scope = env.extend()
     for x in exp['vars']:
@@ -498,3 +495,87 @@ def evaluation(exp, env):
   else:
     raise Exception("Cannot Evaluate Type {}".format(exptype))
 
+def apply_op(op, a, b):
+  def build(t, val):
+    return {'type': t, 'value': val}
+  def num(x):
+    try:
+      x = x['value']
+    except:
+      pass
+    if isinstance(x, (int, long)) or isinstance(x, float):
+      return x
+    raise Exception('{} is not a number'.format(x))
+  def div(x):
+    try:
+      x = x['value']
+    except:
+      pass
+    if num(x) == 0: 
+      raise Exception('Cannot divide by zero') 
+    else: return x
+  if a['type'] == 'list' and op == '*':
+    if len(a['value']) == 0:
+      return {'type': 'list', 'value': npo.vect([npo.null()]*num(b.value))}
+    return {'type': 'list', 'value': npo.vect(a['value']*num(b.value))}
+  if op == '+' : a = a.add(b);return build(a.getType, a)
+  elif op == '-' : a = a.subtract(b);return build(a.getType(), a)
+  elif op == '*' : a = a.multiply(b);return build(a.getType(), a)
+  elif op == '/' : a = a.divide(b);return build(a.getType(), a)
+  elif op == '%' : return build('num', num(a.value) % div(b.value))
+  elif op == '&&': return build('bool', npo.boolean(a.value != False and b.value))
+  elif op == '||': return build('bool', npo.boolean(a.value if a.value != False else b.value))
+  elif op == '<' : return build('bool', npo.boolean(num(a.value) < num(b.value)))
+  elif op == '>' : return build('bool', npo.boolean(num(a.value) > num(b.value)))
+  elif op == '<=': return build('bool', npo.boolean(num(a.value) <= num(b.value)))
+  elif op == '>=': return build('bool', npo.boolean(num(a.value) >= num(b.value)))
+  elif op == '==': return build('bool', npo.boolean(a.equals(b)))
+  elif op == '!=': return build('bool', npo.boolean(not a.equals(b)))
+  StreamReader.error("Cannot apply aperator %s" % op)
+
+def make_lambda(env, exp):
+  def lamda(*args):
+     names = exp['vars']	
+     scope = env.extend()
+     for i in range(0, len(names)):
+       scope.define(names[i]['name'], args[i], names[i]['const'])
+     return evaluation(exp['body'], scope)
+  if exp['name']:
+    name = exp['name']
+    env = env.extend()
+    env.define(name, lamda)
+  return lamda
+
+def compile(code, fname):
+  parser = Parser(Tokenizer(StreamReader(code)))
+  ast = Parser(Tokenizer(StreamReader(code))).parse_toplevel()
+  with open(fname + '.ast', 'w') as fin:
+    fin.write(json.dumps(ast))
+
+def execute(code, args):
+  code = json.loads(code)
+  globalenv = Environment()
+  natives.setup_natives(globalenv)
+  evaluation(code, globalenv)
+  try:
+    for el in args['args']:
+      MAIN['args'].append({'type': 'str', 'value': args['args']})
+    except:
+    MAIN['args'].append({'type': 'null', 'value': None})
+  evaluation(MAIN, globalenv)
+
+if __name__ == '__main__':
+  parser = argparse.ArgumentParser(description='The compiler for the --Name Pending-- language')
+  parser.add_argument('code', help='The main file to run')
+  parser.add_argument('--args', '-a', help='Arguments to pass to main as a list', nargs='*')
+  args = vars(parser.parse_args())
+  code = ""
+  with open(args['code']) as fin:
+    code = fin.read()
+  ext = args['code'].split('.')
+  if ext[1] == 'np':
+    compile(code, ext[0])
+  elif ext[1] == 'ast':
+    execute(code, args)
+  else:
+    print('Input file not ".np" or ".ast"')
