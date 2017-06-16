@@ -26,6 +26,7 @@ class StreamReader(object):
       StreamReader.col = 0
     else:
       StreamReader.col += 1
+    return char
 
   def peek(self):
     return self.stream[self.pos] if self.pos < len(self.stream) else ''
@@ -40,7 +41,7 @@ class StreamReader(object):
 
   @staticmethod
   def error(msg):
-    raise SyntaxError('{} at location {}:{}'.format(errmsg, StreamReader.line, StreamReader.col))
+    raise SyntaxError('{} at location {}:{}'.format(msg, StreamReader.line, StreamReader.col))
 
 class Tokenizer(object):
   cur = None
@@ -65,7 +66,7 @@ class Tokenizer(object):
     return self.is_id_start(char) or "?!-<>=0123456789".find(char) >= 0
 
   def is_keyword(self, string):
-    return string in Tokenizer.KEY_WORDS
+    return string in Tokenizer.keywords
 
   def read_while(self, conditional):
     string = ""
@@ -122,29 +123,29 @@ class Tokenizer(object):
   def tokenize(self):
     while self.stream.peek().isspace():
       self.stream.next()
-      if self.stream.eof():return False
-      char = self.stream.peek()
-      if char is '#':
-        self.stream.skipComment()
-        return self.next()
-      if char is '"':return self.tokenize_string('"')
-      if char is "'":return self.tokenize_string("'")
-      if self.is_int(char):return self.tokenize_number()
-      if self.is_id_start(char):return self.tokenize_identifier()
-      if self.is_punctuation(char):
-        return {'type': 'punc', 'value': self.stream.next()}
-      if self.is_operation(char):
-        return {'type': 'op', 'value': self.read_while(self.is_operation)}
-     self.stream.error('%s is not a recognized character \n' % char)
+    if self.stream.eof():return False
+    char = self.stream.peek()
+    if char is '#':
+      self.stream.skipComment()
+      return self.next()
+    if char is '"':return self.tokenize_string('"')
+    if char is "'":return self.tokenize_string("'")
+    if self.is_int(char):return self.tokenize_number()
+    if self.is_id_start(char):return self.tokenize_identifier()
+    if self.is_punctuation(char):
+      return {'type': 'punc', 'value': self.stream.next()}
+    if self.is_operation(char):
+      return {'type': 'op', 'value': self.read_while(self.is_operation)}
+    self.stream.error('{} is not a recognized character \n'.format(char))
 
   def peek(self):
-    if not Tokenizer.CURRENT:
-      Tokenizer.CURRENT = self.tokenize()
-      return Tokenizer.CURRENT
+    if not Tokenizer.cur:
+      Tokenizer.cur = self.tokenize()
+    return Tokenizer.cur
 
   def next(self):
-    tok = Tokenizer.CURRENT
-    Tokenizer.CURRENT = None
+    tok = Tokenizer.cur
+    Tokenizer.cur = None
     return tok if tok else self.tokenize()
 
   def eof(self):
@@ -172,18 +173,18 @@ class Parser(object):
 
   def skip_punc(self, punc):
     if self.is_punc(punc): self.tokenizer.next()
-    else: self.tokenizer.stream.error('Expecting Punctuation: "%s"' % punc)
+    else: self.tokenizer.stream.error('Expecting Punctuation: "{}"'.format(punc))
 
   def skip_op(self, op):
     if self.is_op(op): self.tokenizer.next()
-    else: self.tokenizer.stream.error('Expecting Operator: "%s"' % op)
+    else: self.tokenizer.stream.error('Expecting Operator: "{}"'.format(op))
 
   def skip_kw(self, kw):
     if self.is_kw(kw): self.tokenizer.next()
-    else: self.tokenizer.stream.error('Expecting Keyword: "%s"' % kw)
+    else: self.tokenizer.stream.error('Expecting Keyword: "{}"'.format(kw))
 
   def unexpected(self, token):
-    self.tokenizer.stream.error('Unexpected Token %r' % token)
+    self.tokenizer.stream.error('Unexpected Token {}'.format(token))
 
   def maybe_binary(self, left, my_pred):
     token = self.is_op()
@@ -208,7 +209,7 @@ class Parser(object):
       else: self.skip_punc(separator)
       if self.is_punc(stop): break
       a.append(parser())
-      self.skip_punc(stop)
+    self.skip_punc(stop)
     return a
 
   def parse_call(self, function):
@@ -236,20 +237,20 @@ class Parser(object):
       ret.update({'else': self.parse_expression()})
     return ret
 
-def parse_lambda(self):
-  return {'type': 'lambda',
-          'name': self.tokenizer.next()['value'] if self.tokenizer.peek()['type'] == 'var' else False,
-          'vars': self.delimited('(', ')', ',', self.parse_varname),
-          'body': self.parse_expression()
-         }
+  def parse_lambda(self):
+    return {'type': 'lambda',
+            'name': self.tokenizer.next()['value'] if self.tokenizer.peek()['type'] == 'var' else False,
+            'vars': self.delimited('(', ')', ',', self.parse_varname),
+            'body': self.parse_expression()
+           }
 
-def parse_vardef(self):
-  name = self.parse_varname()
-  var = ''
-  if self.is_op('='):
-    self.tokenizer.next()
-    var = self.parse_expression()
-  return {'name': name, 'def': var}
+  def parse_vardef(self):
+    name = self.parse_varname()
+    var = ''
+    if self.is_op('='):
+      self.tokenizer.next()
+      var = self.parse_expression()
+    return {'name': name, 'def': var}
 
   def parse_let(self):
     self.skip_kw('let')
@@ -477,10 +478,10 @@ def evaluation(exp, env):
   elif exptype == 'if':
     cond = evaluation(exp['cond'], env)
     if cond['value'] != False: return evaluation(exp['then'], env)
-      try:
-        return evaluation(exp['else'], env)
-      except:
-    return False
+    try:
+      return evaluation(exp['else'], env)
+    except:
+      return False
   elif exptype == 'prog':
     val = False
     for var in exp['prog']:
@@ -531,7 +532,7 @@ def apply_op(op, a, b):
   elif op == '>=': return build('bool', npo.boolean(num(a.value) >= num(b.value)))
   elif op == '==': return build('bool', npo.boolean(a.equals(b)))
   elif op == '!=': return build('bool', npo.boolean(not a.equals(b)))
-  StreamReader.error("Cannot apply aperator %s" % op)
+  raise Exception("Cannot apply aperator {}".format(op))
 
 def make_lambda(env, exp):
   def lamda(*args):
@@ -549,8 +550,7 @@ def make_lambda(env, exp):
 def compile(code, fname):
   parser = Parser(Tokenizer(StreamReader(code)))
   ast = Parser(Tokenizer(StreamReader(code))).parse_toplevel()
-  with open(fname + '.ast', 'w') as fin:
-    fin.write(json.dumps(ast))
+  return ast
 
 def execute(code, args):
   code = json.loads(code)
@@ -560,7 +560,7 @@ def execute(code, args):
   try:
     for el in args['args']:
       MAIN['args'].append({'type': 'str', 'value': args['args']})
-    except:
+  except:
     MAIN['args'].append({'type': 'null', 'value': None})
   evaluation(MAIN, globalenv)
 
@@ -573,9 +573,4 @@ if __name__ == '__main__':
   with open(args['code']) as fin:
     code = fin.read()
   ext = args['code'].split('.')
-  if ext[1] == 'np':
-    compile(code, ext[0])
-  elif ext[1] == 'ast':
-    execute(code, args)
-  else:
-    print('Input file not ".np" or ".ast"')
+  execute(compile(code, ext[0]), args)
